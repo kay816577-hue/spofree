@@ -1,5 +1,4 @@
-# SpoFree, Monochrome and similar services are down due to TIDAL changing its API services. goodbye o7
-
+# good news, [monochrome](https://monochrome.tf) got updated and now works through QOBUZ! I wont update SpoFree anymore though.
 ---
 
 # 🎶 SpoFree
