@@ -1,12 +1,21 @@
+import { LocalStorageData, AudioQuality, RecentlyPlayedItem, Album, Artist } from '../types';
 
+const STORAGE_KEY = 'spofreefy_data_v2';
 
-import { Track, Playlist, LocalStorageData, AudioQuality, RecentlyPlayedItem, Album, Artist } from '../types';
+export interface ExtendedLocalStorageData extends LocalStorageData {
+  theme: string;
+  equalizerEnabled: boolean;
+  equalizerBands: number[];
+  fontSize: number;
+  downloadHistory: any[];
+  autoPlay: boolean;
+  normalization: boolean;
+  syncedLyrics: boolean;
+}
 
-const STORAGE_KEY = 'spofreefy_data_v1';
-
-const getStorage = (): LocalStorageData => {
+const getStorage = (): ExtendedLocalStorageData => {
   const data = localStorage.getItem(STORAGE_KEY);
-  const defaultData: LocalStorageData = { 
+  const defaultData: ExtendedLocalStorageData = { 
     likedSongs: [], 
     playlists: [], 
     savedAlbums: [],
@@ -23,21 +32,34 @@ const getStorage = (): LocalStorageData => {
     squareAvatars: false,
     highPerformanceMode: false,
     disableGlow: false,
-    updateTitle: true
+    updateTitle: true,
+    theme: 'default',
+    equalizerEnabled: false,
+    equalizerBands: [0, 0, 0, 0, 0, 0, 0, 0, 0, 0],
+    fontSize: 100,
+    downloadHistory: [],
+    autoPlay: true,
+    normalization: false,
+    syncedLyrics: true,
   };
   
   if (!data) return defaultData;
   
   try {
       const parsed = JSON.parse(data);
-      return { ...defaultData, ...parsed }; // Merge to ensure new fields exist
+      return { ...defaultData, ...parsed };
   } catch (e) {
+      console.error('Storage parse error:', e);
       return defaultData;
   }
 };
 
-const setStorage = (data: LocalStorageData) => {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+const setStorage = (data: ExtendedLocalStorageData) => {
+  try {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+  } catch (e) {
+    console.error('Storage write error:', e);
+  }
 };
 
 export const storageService = {
@@ -152,22 +174,135 @@ export const storageService = {
     setStorage(data);
   },
 
+  // --- NEW: Theme ---
+  getTheme: (): string => {
+    return getStorage().theme;
+  },
+
+  setTheme: (theme: string) => {
+    const data = getStorage();
+    data.theme = theme;
+    setStorage(data);
+  },
+
+  // --- NEW: Equalizer ---
+  getEqualizerEnabled: (): boolean => {
+    return getStorage().equalizerEnabled;
+  },
+
+  setEqualizerEnabled: (enabled: boolean) => {
+    const data = getStorage();
+    data.equalizerEnabled = enabled;
+    setStorage(data);
+  },
+
+  getEqualizerBands: (): number[] => {
+    return getStorage().equalizerBands;
+  },
+
+  setEqualizerBands: (bands: number[]) => {
+    const data = getStorage();
+    data.equalizerBands = bands.slice(0, 10);
+    setStorage(data);
+  },
+
+  // --- NEW: Font Size ---
+  getFontSize: (): number => {
+    return getStorage().fontSize;
+  },
+
+  setFontSize: (size: number) => {
+    const data = getStorage();
+    data.fontSize = Math.max(80, Math.min(150, size));
+    setStorage(data);
+  },
+
+  // --- NEW: Auto Play ---
+  getAutoPlay: (): boolean => {
+    return getStorage().autoPlay;
+  },
+
+  setAutoPlay: (enabled: boolean) => {
+    const data = getStorage();
+    data.autoPlay = enabled;
+    setStorage(data);
+  },
+
+  // --- NEW: Normalization ---
+  getNormalization: (): boolean => {
+    return getStorage().normalization;
+  },
+
+  setNormalization: (enabled: boolean) => {
+    const data = getStorage();
+    data.normalization = enabled;
+    setStorage(data);
+  },
+
+  // --- NEW: Synced Lyrics ---
+  getSyncedLyrics: (): boolean => {
+    return getStorage().syncedLyrics;
+  },
+
+  setSyncedLyrics: (enabled: boolean) => {
+    const data = getStorage();
+    data.syncedLyrics = enabled;
+    setStorage(data);
+  },
+
+  // --- NEW: Download History ---
+  getDownloadHistory: (): any[] => {
+    return getStorage().downloadHistory;
+  },
+
+  addToDownloadHistory: (track: any, quality: string, format: string, timestamp: number) => {
+    try {
+      const data = getStorage();
+      data.downloadHistory = [
+        {
+          id: track.id,
+          title: track.title,
+          artist: track.artist?.name || 'Unknown',
+          album: track.album?.title || 'Unknown',
+          quality,
+          format,
+          timestamp,
+        },
+        ...data.downloadHistory,
+      ].slice(0, 100);
+      setStorage(data);
+    } catch (e) {
+      console.error('Error adding to download history:', e);
+    }
+  },
+
+  clearDownloadHistory: () => {
+    const data = getStorage();
+    data.downloadHistory = [];
+    setStorage(data);
+  },
+
   // --- Liked Songs ---
-  getLikedSongs: (): Track[] => {
+  getLikedSongs: () => {
     return getStorage().likedSongs;
   },
   
-  toggleLikeSong: (track: Track): boolean => {
-    const data = getStorage();
-    const exists = data.likedSongs.some(t => t.id === track.id);
-    
-    if (exists) {
-      data.likedSongs = data.likedSongs.filter(t => t.id !== track.id);
-    } else {
-      data.likedSongs = [track, ...data.likedSongs];
+  toggleLikeSong: (track: any): boolean => {
+    try {
+      const data = getStorage();
+      const exists = data.likedSongs.some(t => t.id === track.id);
+      
+      if (exists) {
+        data.likedSongs = data.likedSongs.filter(t => t.id !== track.id);
+      } else {
+        data.likedSongs = [track, ...data.likedSongs];
+      }
+      setStorage(data);
+      return !exists;
+    } catch (e) {
+      console.error('Error toggling like:', e);
+      return false;
     }
-    setStorage(data);
-    return !exists;
   },
 
   isLiked: (trackId: string | number): boolean => {
@@ -180,15 +315,20 @@ export const storageService = {
   },
 
   toggleSaveAlbum: (album: Album): boolean => {
-      const data = getStorage();
-      const exists = data.savedAlbums.some(a => a.id === album.id);
-      if (exists) {
-          data.savedAlbums = data.savedAlbums.filter(a => a.id !== album.id);
-      } else {
-          data.savedAlbums = [album, ...data.savedAlbums];
+      try {
+        const data = getStorage();
+        const exists = data.savedAlbums.some(a => a.id === album.id);
+        if (exists) {
+            data.savedAlbums = data.savedAlbums.filter(a => a.id !== album.id);
+        } else {
+            data.savedAlbums = [album, ...data.savedAlbums];
+        }
+        setStorage(data);
+        return !exists;
+      } catch (e) {
+        console.error('Error toggling album save:', e);
+        return false;
       }
-      setStorage(data);
-      return !exists;
   },
 
   isAlbumSaved: (albumId: string | number): boolean => {
@@ -201,15 +341,20 @@ export const storageService = {
   },
 
   toggleFollowArtist: (artist: Artist): boolean => {
-      const data = getStorage();
-      const exists = data.followedArtists.some(a => a.id === artist.id);
-      if (exists) {
-          data.followedArtists = data.followedArtists.filter(a => a.id !== artist.id);
-      } else {
-          data.followedArtists = [artist, ...data.followedArtists];
+      try {
+        const data = getStorage();
+        const exists = data.followedArtists.some(a => a.id === artist.id);
+        if (exists) {
+            data.followedArtists = data.followedArtists.filter(a => a.id !== artist.id);
+        } else {
+            data.followedArtists = [artist, ...data.followedArtists];
+        }
+        setStorage(data);
+        return !exists;
+      } catch (e) {
+        console.error('Error toggling follow:', e);
+        return false;
       }
-      setStorage(data);
-      return !exists;
   },
 
   isArtistFollowed: (artistId: string | number): boolean => {
@@ -217,94 +362,122 @@ export const storageService = {
   },
 
   // --- Playlists ---
-  getPlaylists: (): Playlist[] => {
+  getPlaylists: () => {
     return getStorage().playlists;
   },
 
-  savePlaylist: (playlist: Playlist): boolean => {
-      const data = getStorage();
-      const exists = data.playlists.some(p => p.uuid === playlist.uuid);
-      if (exists) {
-          data.playlists = data.playlists.filter(p => p.uuid !== playlist.uuid);
-      } else {
-          data.playlists.push({ ...playlist, isLocal: playlist.isLocal ?? false });
+  savePlaylist: (playlist: any): boolean => {
+      try {
+        const data = getStorage();
+        const exists = data.playlists.some(p => p.uuid === playlist.uuid);
+        if (exists) {
+            data.playlists = data.playlists.filter(p => p.uuid !== playlist.uuid);
+        } else {
+            data.playlists.push({ ...playlist, isLocal: playlist.isLocal ?? false });
+        }
+        setStorage(data);
+        return !exists;
+      } catch (e) {
+        console.error('Error saving playlist:', e);
+        return false;
       }
-      setStorage(data);
-      return !exists;
   },
 
   isPlaylistSaved: (uuid: string): boolean => {
       return getStorage().playlists.some(p => p.uuid === uuid);
   },
 
-  createPlaylist: (title: string): Playlist => {
-    const data = getStorage();
-    const newPlaylist: Playlist = {
-      uuid: crypto.randomUUID(),
-      title,
-      description: '',
-      image: 'https://via.placeholder.com/300?text=' + encodeURIComponent(title),
-      creator: { name: 'You' },
-      isLocal: true,
-      tracks: []
-    };
-    data.playlists.push(newPlaylist);
-    setStorage(data);
-    return newPlaylist;
-  },
-
-  updatePlaylist: (uuid: string, updates: { title?: string, description?: string, image?: string }) => {
-    const data = getStorage();
-    const playlist = data.playlists.find(p => p.uuid === uuid);
-    if (playlist) {
-      if (updates.title !== undefined) playlist.title = updates.title;
-      if (updates.description !== undefined) playlist.description = updates.description;
-      if (updates.image !== undefined) playlist.image = updates.image;
+  createPlaylist: (title: string) => {
+    try {
+      const data = getStorage();
+      const newPlaylist = {
+        uuid: crypto.randomUUID?.() || 'playlist_' + Date.now(),
+        title,
+        description: '',
+        image: 'https://via.placeholder.com/300?text=' + encodeURIComponent(title),
+        creator: { name: 'You' },
+        isLocal: true,
+        tracks: []
+      };
+      data.playlists.push(newPlaylist);
       setStorage(data);
+      return newPlaylist;
+    } catch (e) {
+      console.error('Error creating playlist:', e);
+      return null;
     }
   },
 
-  updatePlaylistTracks: (uuid: string, tracks: Track[]) => {
+  updatePlaylist: (uuid: string, updates: { title?: string, description?: string, image?: string }) => {
+    try {
       const data = getStorage();
       const playlist = data.playlists.find(p => p.uuid === uuid);
       if (playlist) {
-          playlist.tracks = tracks;
-          // Update cover if needed and not custom
-          if (playlist.image.includes('placeholder') && tracks.length > 0) {
-               playlist.image = tracks[0].album.cover;
-          }
-          setStorage(data);
+        if (updates.title !== undefined) playlist.title = updates.title;
+        if (updates.description !== undefined) playlist.description = updates.description;
+        if (updates.image !== undefined) playlist.image = updates.image;
+        setStorage(data);
+      }
+    } catch (e) {
+      console.error('Error updating playlist:', e);
+    }
+  },
+
+  updatePlaylistTracks: (uuid: string, tracks: any[]) => {
+      try {
+        const data = getStorage();
+        const playlist = data.playlists.find(p => p.uuid === uuid);
+        if (playlist) {
+            playlist.tracks = tracks;
+            if (playlist.image.includes('placeholder') && tracks.length > 0) {
+                 playlist.image = tracks[0].album?.cover || playlist.image;
+            }
+            setStorage(data);
+        }
+      } catch (e) {
+        console.error('Error updating playlist tracks:', e);
       }
   },
 
   renamePlaylist: (uuid: string, newTitle: string) => {
-    // Deprecated wrapper, use updatePlaylist
-    const data = getStorage();
-    const playlist = data.playlists.find(p => p.uuid === uuid);
-    if (playlist) {
-      playlist.title = newTitle;
-      setStorage(data);
+    try {
+      const data = getStorage();
+      const playlist = data.playlists.find(p => p.uuid === uuid);
+      if (playlist) {
+        playlist.title = newTitle;
+        setStorage(data);
+      }
+    } catch (e) {
+      console.error('Error renaming playlist:', e);
     }
   },
 
   deletePlaylist: (uuid: string) => {
-    const data = getStorage();
-    data.playlists = data.playlists.filter(p => p.uuid !== uuid);
-    setStorage(data);
+    try {
+      const data = getStorage();
+      data.playlists = data.playlists.filter(p => p.uuid !== uuid);
+      setStorage(data);
+    } catch (e) {
+      console.error('Error deleting playlist:', e);
+    }
   },
 
-  addTrackToPlaylist: (playlistUuid: string, track: Track) => {
-    const data = getStorage();
-    const playlist = data.playlists.find(p => p.uuid === playlistUuid);
-    if (playlist) {
-      if (!playlist.tracks) playlist.tracks = [];
-      if (!playlist.tracks.some(t => t.id === track.id)) {
-        playlist.tracks.push(track);
-        if (playlist.image.includes('placeholder') && track.album.cover) {
-            playlist.image = track.album.cover;
+  addTrackToPlaylist: (playlistUuid: string, track: any) => {
+    try {
+      const data = getStorage();
+      const playlist = data.playlists.find(p => p.uuid === playlistUuid);
+      if (playlist) {
+        if (!playlist.tracks) playlist.tracks = [];
+        if (!playlist.tracks.some(t => t.id === track.id)) {
+          playlist.tracks.push(track);
+          if (playlist.image.includes('placeholder') && track.album?.cover) {
+              playlist.image = track.album.cover;
+          }
+          setStorage(data);
         }
-        setStorage(data);
       }
+    } catch (e) {
+      console.error('Error adding track to playlist:', e);
     }
   },
 
@@ -314,10 +487,24 @@ export const storageService = {
   },
 
   addToHistory: (query: string) => {
-    const data = getStorage();
-    const filtered = data.searchHistory.filter(q => q.toLowerCase() !== query.toLowerCase());
-    data.searchHistory = [query, ...filtered].slice(0, 10);
-    setStorage(data);
+    try {
+      const data = getStorage();
+      const filtered = data.searchHistory.filter(q => q.toLowerCase() !== query.toLowerCase());
+      data.searchHistory = [query, ...filtered].slice(0, 50);
+      setStorage(data);
+    } catch (e) {
+      console.error('Error adding to history:', e);
+    }
+  },
+
+  clearHistory: () => {
+    try {
+      const data = getStorage();
+      data.searchHistory = [];
+      setStorage(data);
+    } catch (e) {
+      console.error('Error clearing history:', e);
+    }
   },
 
   // --- Recently Played ---
@@ -326,13 +513,27 @@ export const storageService = {
   },
 
   addToRecentlyPlayed: (item: RecentlyPlayedItem) => {
+      try {
+        const data = getStorage();
+        const filtered = data.recentlyPlayed.filter(i => {
+            const existingId = (i.data as any).id || (i.data as any).uuid;
+            const newId = (item.data as any).id || (item.data as any).uuid;
+            return existingId !== newId;
+        });
+        data.recentlyPlayed = [item, ...filtered].slice(0, 100);
+        setStorage(data);
+      } catch (e) {
+        console.error('Error adding to recently played:', e);
+      }
+  },
+
+  clearRecentlyPlayed: () => {
+    try {
       const data = getStorage();
-      const filtered = data.recentlyPlayed.filter(i => {
-          const existingId = (i.data as any).id || (i.data as any).uuid;
-          const newId = (item.data as any).id || (item.data as any).uuid;
-          return existingId !== newId;
-      });
-      data.recentlyPlayed = [item, ...filtered].slice(0, 20); // Keep last 20
+      data.recentlyPlayed = [];
       setStorage(data);
-  }
+    } catch (e) {
+      console.error('Error clearing recently played:', e);
+    }
+  },
 };
